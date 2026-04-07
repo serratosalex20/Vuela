@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// NEXTAUTH ADAPTER TABLES
+// ==========================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// VUELA CORE MODELS
+// ==========================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          String    @default("RIDER") // RIDER | PILOT | ADMIN
+  rating        Float     @default(5.0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts          Account[]
+  sessions          Session[]
+  airCars           AirCar[]
+  pilotVerification PilotVerification?
+  ridesAsRider      Ride[]    @relation("RiderRides")
+  ridesAsPilot      Ride[]    @relation("PilotRides")
+}
+
+model PilotVerification {
+  id                            String    @id @default(cuid())
+  pilotId                       String    @unique
+  aviationLicenseType           String    // PPL, CPL, ATPL
+  aviationLicenseNumber         String
+  roadDrivingLicenseValid       Boolean   @default(false)
+  drivingExperienceYears        Int       @default(0)
+  annualBackgroundCheckCleared  Boolean   @default(false)
+  realTimeIdCheckEnabled        Boolean   @default(false)
+  certifiedMechanicId           String?
+  airworthinessCertificateValid Boolean   @default(false)
+  lastAnnualMaintenanceDate     DateTime?
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+
+  pilot User @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+}
+
+model AirCar {
+  id                 String   @id @default(cuid())
+  pilotId            String
+  make               String // Klein Vision, AeroMobil, Alef, Honda, Joby Aviation, etc.
+  model              String
+  tailNumber         String?  @unique
+  takeOffType        String   @default("VTOL") // VTOL | SHORT_RUNWAY
+  maxAltitude        Int // in feet
+  maxRange           Int // in km
+  cruiseSpeed        Int?    // in mph
+  capacity           Int // passenger seats
+  payloadLimit       Int // in kg
+  transformationTime String? // e.g. "2m 15s"
+  maintenanceRecords String? // URL/document link
+  faaCertStatus      String? // certification status
+  imageUrl           String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  pilot User   @relation(fields: [pilotId], references: [id])
+  rides Ride[]
+}
+
+model Ride {
+  id              String   @id @default(cuid())
+  riderId         String
+  pilotId         String?
+  airCarId        String?
+  status          String   @default("REQUESTED") // REQUESTED | ACCEPTED | IN_PROGRESS | COMPLETED | CANCELLED
+  flightClass     String   @default("STANDARD") // STANDARD | EXECUTIVE | EVTOL_XL
+  pickupLocation  String
+  dropoffLocation String
+  estimatedFare   Float?
+  actualFare      Float?
+  distance        Float? // in nautical miles
+  duration        Int? // in minutes
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  rider  User    @relation("RiderRides", fields: [riderId], references: [id])
+  pilot  User?   @relation("PilotRides", fields: [pilotId], references: [id])
+  airCar AirCar? @relation(fields: [airCarId], references: [id])
+}
